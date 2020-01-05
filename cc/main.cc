@@ -1,6 +1,6 @@
 /*
  *  Author: SpringHack - springhack@live.cn
- *  Last modified: 2020-01-05 20:22:38
+ *  Last modified: 2020-01-06 02:10:17
  *  Filename: cc/main.cc
  *  Description: Created by SpringHack using vim automatically.
  */
@@ -29,6 +29,7 @@ struct out_data {
 class Process : public ObjectWrap<Process> {
 public:
   Process(const CallbackInfo& info);
+  void Finalize(Napi::Env env);
 
   void Kill(const CallbackInfo& info);
   void CloseStdin(const CallbackInfo& info);
@@ -36,7 +37,6 @@ public:
   Napi::Value GetExitStatus(const CallbackInfo& info);
   Napi::Value TryGetExitStatus(const CallbackInfo& info);
   Napi::Value Write(const CallbackInfo& info);
-  void ReleaseFunctions(const CallbackInfo& info);
 
   void start_exit_monitor();
 
@@ -76,31 +76,37 @@ Process::Process(const CallbackInfo& info) : ObjectWrap<Process>(info) {
   on_stdout = ThreadSafeFunction::New(info.Env(), info[3].As<Function>(), "process_on_stdout", 0, 1);
   on_stderr = ThreadSafeFunction::New(info.Env(), info[4].As<Function>(), "process_on_stdout", 0, 1);
   on_exit = ThreadSafeFunction::New(info.Env(), info[5].As<Function>(), "process_on_exit", 0, 1);
-  this->_process = nullptr;
+  _process = nullptr;
+}
+
+void Process::Finalize(Napi::Env env) {
+  on_stdout.Release();
+  on_stderr.Release();
+  on_exit.Release();
 }
 
 void Process::Kill(const CallbackInfo& info) {
   bool force = info[0].As<Boolean>();
-  this->_process->kill(force);
+  _process->kill(force);
 }
 
 void Process::CloseStdin(const CallbackInfo& info) {
-  this->_process->close_stdin();
+  _process->close_stdin();
 }
 
 Value Process::GetID(const CallbackInfo& info) {
-  TinyProcessLib::Process::id_type id = this->_process->get_id();
+  TinyProcessLib::Process::id_type id = _process->get_id();
   return Number::New(info.Env(), id);
 }
 
 Value Process::GetExitStatus(const CallbackInfo& info) {
-  int status = this->_process->get_exit_status();
+  int status = _process->get_exit_status();
   return Number::New(info.Env(), status);
 }
 
 Value Process::TryGetExitStatus(const CallbackInfo& info) {
   int status;
-  bool success = this->_process->try_get_exit_status(status);
+  bool success = _process->try_get_exit_status(status);
   if (success) {
     return Number::New(info.Env(), status);
   }
@@ -110,20 +116,15 @@ Value Process::TryGetExitStatus(const CallbackInfo& info) {
 Value Process::Write(const CallbackInfo& info) {
   if (info[0].IsString()) {
     std::string data = info[0].As<String>();
-    bool ret = this->_process->write(data);
+    bool ret = _process->write(data);
     return Boolean::New(info.Env(), ret);
   }
   if (info[0].IsBuffer()) {
     Buffer<uint8_t> buffer = info[0].As<Buffer<uint8_t>>();
-    bool ret = this->_process->write(reinterpret_cast<const char *>(buffer.Data()), reinterpret_cast<size_t>(buffer.Length()));
+    bool ret = _process->write(reinterpret_cast<const char *>(buffer.Data()), reinterpret_cast<size_t>(buffer.Length()));
     return Boolean::New(info.Env(), ret);
   }
   return Boolean::New(info.Env(), false);
-}
-
-void Process::ReleaseFunctions(const CallbackInfo& info) {
-  on_stdout.Release();
-  on_stderr.Release();
 }
 
 void Process::Initialize(Napi::Env env, Object exports) {
@@ -133,8 +134,7 @@ void Process::Initialize(Napi::Env env, Object exports) {
     InstanceMethod("get_id", &Process::GetID),
     InstanceMethod("get_exit_status", &Process::GetExitStatus),
     InstanceMethod("try_get_exit_status", &Process::TryGetExitStatus),
-    InstanceMethod("write", &Process::Write),
-    InstanceMethod("release", &Process::ReleaseFunctions)
+    InstanceMethod("write", &Process::Write)
   });
   Process::constructor = Persistent(func);
   Process::constructor.SuppressDestruct();
@@ -143,11 +143,12 @@ void Process::Initialize(Napi::Env env, Object exports) {
 
 void Process::start_exit_monitor() {
   std::thread([this]() {
-    int status = this->_process->get_exit_status();
-    this->on_exit.BlockingCall(&status, [](Napi::Env env, Function cb, int* status) {
-      cb.Call({ Number::New(env, *status) });
+    int* status = new int;
+    *status = _process->get_exit_status();
+    on_exit.BlockingCall(status, [](Napi::Env env, Function cb, int* status) {
+      cb.Call({ Number::New(env, reinterpret_cast<int>(*status)) });
+      delete status;
     });
-    on_exit.Release();
   }).detach();
 }
 
@@ -158,17 +159,18 @@ public:
   SpawnAsyncWorker(Process* process, Function cb, const char* resource_name)
     : AsyncWorker(cb, resource_name), process(process) {}
   void Execute() override {
+    Process* process = this->process;
     cp = std::make_unique<TinyProcessLib::Process>(
       process->args,
       process->path,
       process->env,
-      [this](const char* bytes, size_t n) {
+      [process](const char* bytes, size_t n) {
         out_data data(bytes, n);
         process->on_stdout.BlockingCall(&data, [](Napi::Env env, Function out, out_data* data) {
           out.Call({ Buffer<char>::Copy(env, data->bytes, data->n) });
         });
       },
-      [this](const char* bytes, size_t n) {
+      [process](const char* bytes, size_t n) {
         out_data data(bytes, n);
         process->on_stderr.BlockingCall(&data, [](Napi::Env env, Function err, out_data* data) {
           err.Call({ Buffer<char>::Copy(env, data->bytes, data->n) });
