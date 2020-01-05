@@ -9,6 +9,7 @@ def GetNodeHeaders():
   if node_version == '':
     return []
   node_headers = ['-I', expanduser('~') + '/.node-gyp/' + node_version.replace('v', '').replace('\n', '') + '/include/node']
+  node_headers += ['-I', expanduser('~') + '/Library/Caches/node-gyp/' + node_version.replace('v', '').replace('\n', '') + '/include/node']
   return node_headers
 
 flags = [

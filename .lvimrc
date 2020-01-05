@@ -2,13 +2,14 @@
 let node_output = system('node -v')
 let node_version = substitute(node_output, '[v\n]', '', 'g')
 
-" Get nan headers path
+" Get n-api headers path
 let s:path = expand('<sfile>:p:h')
-let nan_headers = s:path . '/node_modules/node-addon-api'
+let napi_headers = s:path . '/node_modules/node-addon-api'
 
 " Get node headers path
 let node_headers = $HOME . '/.node-gyp/' . node_version . '/include/node'
+let node_headers_newer = $HOME . '/Library/Caches/node-gyp/' . node_version . '/include/node'
 
 " Set ale cpp flags
-let g:ale_cpp_gcc_options = '-std=c++14 -Wall -I ' . node_headers . ' -I ' . nan_headers
-let g:ale_cpp_clang_options = '-std=c++14 -Wall -I ' . node_headers . ' -I ' . nan_headers
+let g:ale_cpp_gcc_options = '-std=c++14 -Wall -I ' . node_headers . ' -I ' . napi_headers . ' -I ' . node_headers_newer
+let g:ale_cpp_clang_options = '-std=c++14 -Wall -I ' . node_headers . ' -I ' . napi_headers . ' -I ' . node_headers_newer

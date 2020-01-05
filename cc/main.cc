@@ -1,6 +1,6 @@
 /*
  *  Author: SpringHack - springhack@live.cn
- *  Last modified: 2020-01-05 16:35:53
+ *  Last modified: 2020-01-05 20:22:38
  *  Filename: cc/main.cc
  *  Description: Created by SpringHack using vim automatically.
  */
@@ -36,6 +36,7 @@ public:
   Napi::Value GetExitStatus(const CallbackInfo& info);
   Napi::Value TryGetExitStatus(const CallbackInfo& info);
   Napi::Value Write(const CallbackInfo& info);
+  void ReleaseFunctions(const CallbackInfo& info);
 
   void start_exit_monitor();
 
@@ -120,6 +121,11 @@ Value Process::Write(const CallbackInfo& info) {
   return Boolean::New(info.Env(), false);
 }
 
+void Process::ReleaseFunctions(const CallbackInfo& info) {
+  on_stdout.Release();
+  on_stderr.Release();
+}
+
 void Process::Initialize(Napi::Env env, Object exports) {
   Function func = DefineClass(env, "Process", {
     InstanceMethod("kill", &Process::Kill),
@@ -127,7 +133,8 @@ void Process::Initialize(Napi::Env env, Object exports) {
     InstanceMethod("get_id", &Process::GetID),
     InstanceMethod("get_exit_status", &Process::GetExitStatus),
     InstanceMethod("try_get_exit_status", &Process::TryGetExitStatus),
-    InstanceMethod("write", &Process::Write)
+    InstanceMethod("write", &Process::Write),
+    InstanceMethod("release", &Process::ReleaseFunctions)
   });
   Process::constructor = Persistent(func);
   Process::constructor.SuppressDestruct();
@@ -137,13 +144,11 @@ void Process::Initialize(Napi::Env env, Object exports) {
 void Process::start_exit_monitor() {
   std::thread([this]() {
     int status = this->_process->get_exit_status();
-    this->on_exit.BlockingCall(&status, [this](Napi::Env env, Function cb, int* status) {
-      on_stdout.Release();
-      on_stderr.Release();
+    this->on_exit.BlockingCall(&status, [](Napi::Env env, Function cb, int* status) {
       cb.Call({ Number::New(env, *status) });
     });
     on_exit.Release();
-  });
+  }).detach();
 }
 
 class SpawnAsyncWorker : public AsyncWorker {

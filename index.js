@@ -1,6 +1,6 @@
 /*
  *  Author: SpringHack - springhack@live.cn
- *  Last modified: 2020-01-05 16:35:13
+ *  Last modified: 2020-01-05 22:13:32
  *  Filename: index.js
  *  Description: Created by SpringHack using vim automatically.
  */
@@ -22,6 +22,5 @@ lib.spawn(cp, () => {
   cp.write('ls -al && ls -al > /dev/stderr \n\n');
   cp.write('ls -al && ls -al > /dev/stderr \n\n');
   cp.write('ls -al && ls -al > /dev/stderr \nexit\n');
-  cp.kill(true);
-  cp = null;
+  // cp = null;
 });
