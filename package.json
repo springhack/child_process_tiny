@@ -1,0 +1,24 @@
+{
+  "name": "child_process_tiny",
+  "version": "1.0.0",
+  "main": "./lib/index.js",
+  "license": "MIT",
+  "scripts": {
+    "build": "npm run build:ts && npm run build:cc",
+    "build:ts": "",
+    "build:cc": "node-gyp rebuild"
+  },
+  "files": [
+    "cc",
+    "lib",
+    "binding.gyp",
+    "package.json"
+  ],
+  "devDependencies": {
+    "typescript": "^3.7.4"
+  },
+  "dependencies": {
+    "bindings": "^1.5.0",
+    "node-addon-api": "^2.0.0"
+  }
+}
