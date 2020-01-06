@@ -1,6 +1,6 @@
 /*
  *  Author: SpringHack - springhack@live.cn
- *  Last modified: 2020-01-06 02:10:17
+ *  Last modified: 2020-01-06 12:41:26
  *  Filename: cc/main.cc
  *  Description: Created by SpringHack using vim automatically.
  */
@@ -9,6 +9,7 @@
 #include <thread>
 #include <vector>
 #include <memory>
+#include <tuple>
 
 #include <napi.h>
 
@@ -114,15 +115,40 @@ Value Process::TryGetExitStatus(const CallbackInfo& info) {
 }
 
 Value Process::Write(const CallbackInfo& info) {
-  if (info[0].IsString()) {
-    std::string data = info[0].As<String>();
-    bool ret = _process->write(data);
-    return Boolean::New(info.Env(), ret);
-  }
-  if (info[0].IsBuffer()) {
-    Buffer<uint8_t> buffer = info[0].As<Buffer<uint8_t>>();
-    bool ret = _process->write(reinterpret_cast<const char *>(buffer.Data()), reinterpret_cast<size_t>(buffer.Length()));
-    return Boolean::New(info.Env(), ret);
+  if (info[0].IsString() || info[0].IsBuffer()) {
+    bool is_buffer = info[0].IsBuffer();
+    std::tuple<bool, std::vector<uint8_t>, std::string> data = std::make_tuple(is_buffer, std::vector<uint8_t>(), "");
+    if (is_buffer) {
+      Buffer<uint8_t> buffer = info[0].As<Buffer<uint8_t>>();
+      uint8_t* _data = reinterpret_cast<uint8_t *>(buffer.Data());
+      size_t _length = reinterpret_cast<size_t>(buffer.Length());
+      std::get<1>(data).assign(_data, _data + _length);
+    } else {
+      std::string _str = info[0].As<String>();
+      std::get<2>(data).assign(_str);
+    }
+    ThreadSafeFunction tsfn = ThreadSafeFunction::New(info.Env(), info[1].As<Function>(), "write_async_worker", 0, 1);
+    std::thread([this, data, tsfn]() {
+      try {
+        bool* ret = new bool;
+        if (std::get<0>(data)) {
+          *ret = _process->write(reinterpret_cast<const char *>(std::get<1>(data).data()), std::get<1>(data).size());
+        } else {
+          *ret = _process->write(std::get<2>(data));
+        }
+        tsfn.BlockingCall(ret, [](Napi::Env env, Function cb, bool* ret) {
+          cb.Call({ Boolean::New(env, !*ret) });
+          delete ret;
+        });
+      } catch (std::exception& e) {
+        const char* error = strdup(e.what());
+        tsfn.BlockingCall(error, [](Napi::Env env, Function cb, const char* error) {
+          cb.Call({ Boolean::New(env, true), String::New(env, error) });
+          free((void *)error);
+        });
+      }
+    }).detach();
+    return Boolean::New(info.Env(), true);
   }
   return Boolean::New(info.Env(), false);
 }

@@ -1,6 +1,6 @@
 /*
  *  Author: SpringHack - springhack@live.cn
- *  Last modified: 2020-01-06 02:48:00
+ *  Last modified: 2020-01-06 13:52:09
  *  Filename: ts/index.ts
  *  Description: Created by SpringHack using vim automatically.
  */
@@ -18,8 +18,15 @@ class Process extends EventEmitter {
   public stdout: EventEmitter = new EventEmitter();
   public stderr: EventEmitter = new EventEmitter();
   public _cp: any;
-  public write(data: string | Buffer) {
-    this._cp.write(data);
+  public write(data: string | Buffer): Promise<boolean> {
+    return new Promise((resolve, reject) => {
+      this._cp.write(data, (error: boolean, message: string) => {
+        if (error) {
+          return reject(message);
+        }
+        return resolve(true);
+      });
+    });
   }
 }
 

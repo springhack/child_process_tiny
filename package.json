@@ -5,7 +5,7 @@
   "license": "MIT",
   "scripts": {
     "build": "npm run build:ts && npm run build:cc",
-    "build:ts": "",
+    "build:ts": "tsc",
     "build:cc": "node-gyp rebuild"
   },
   "files": [
