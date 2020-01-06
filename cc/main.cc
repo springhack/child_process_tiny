@@ -1,6 +1,6 @@
 /*
  *  Author: SpringHack - springhack@live.cn
- *  Last modified: 2020-01-06 12:41:26
+ *  Last modified: 2020-01-06 18:23:42
  *  Filename: cc/main.cc
  *  Description: Created by SpringHack using vim automatically.
  */
@@ -127,26 +127,28 @@ Value Process::Write(const CallbackInfo& info) {
       std::string _str = info[0].As<String>();
       std::get<2>(data).assign(_str);
     }
-    ThreadSafeFunction tsfn = ThreadSafeFunction::New(info.Env(), info[1].As<Function>(), "write_async_worker", 0, 1);
-    std::thread([this, data, tsfn]() {
+    ThreadSafeFunction _tsfn = ThreadSafeFunction::New(info.Env(), info[1].As<Function>(), "write_async_worker", 0, 1);
+    TinyProcessLib::Process* process = _process.get();
+    std::thread([process, data, _tsfn]() {
       try {
         bool* ret = new bool;
         if (std::get<0>(data)) {
-          *ret = _process->write(reinterpret_cast<const char *>(std::get<1>(data).data()), std::get<1>(data).size());
+          *ret = process->write(reinterpret_cast<const char *>(std::get<1>(data).data()), std::get<1>(data).size());
         } else {
-          *ret = _process->write(std::get<2>(data));
+          *ret = process->write(std::get<2>(data));
         }
-        tsfn.BlockingCall(ret, [](Napi::Env env, Function cb, bool* ret) {
+        _tsfn.BlockingCall(ret, [](Napi::Env env, Function cb, bool* ret) {
           cb.Call({ Boolean::New(env, !*ret) });
           delete ret;
         });
       } catch (std::exception& e) {
         const char* error = strdup(e.what());
-        tsfn.BlockingCall(error, [](Napi::Env env, Function cb, const char* error) {
+        _tsfn.BlockingCall(error, [](Napi::Env env, Function cb, const char* error) {
           cb.Call({ Boolean::New(env, true), String::New(env, error) });
           free((void *)error);
         });
       }
+      ThreadSafeFunction(_tsfn).Release();
     }).detach();
     return Boolean::New(info.Env(), true);
   }
