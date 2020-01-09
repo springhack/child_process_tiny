@@ -1,5 +1,5 @@
-# tiny-process-library for node.js using node-addon-api
+# ChildProcess like library, base on tiny-process-library, fully async
 
-> [tiny-process-library](https://gitlab.com/eidheim/tiny-process-library)
+> For more info please visit: [tiny-process-library](https://gitlab.com/eidheim/tiny-process-library)
 
-> Still unstable
+> Unstable version, just for fun !
