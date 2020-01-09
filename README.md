@@ -1,5 +1,7 @@
-# ChildProcess like library, base on tiny-process-library, fully async
+# ChildProcessTiny
 
-> For more info please visit: [tiny-process-library](https://gitlab.com/eidheim/tiny-process-library)
+> ChildProcess like library, base on tiny-process-library, fully async
 
-> Unstable version, just for fun !
+- For more info please visit: [tiny-process-library](https://gitlab.com/eidheim/tiny-process-library)
+
+- Unstable version, just for fun !
