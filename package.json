@@ -6,13 +6,15 @@
   "scripts": {
     "build": "npm run build:ts && npm run build:cc",
     "build:ts": "tsc",
-    "build:cc": "node-gyp rebuild"
+    "build:cc": "node-gyp rebuild",
+    "prepublish": "npm run build:ts"
   },
   "files": [
     "cc",
     "lib",
     "binding.gyp",
-    "package.json"
+    "package.json",
+    "README.md"
   ],
   "devDependencies": {
     "@types/bindings": "^1.3.0",

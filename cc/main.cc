@@ -1,6 +1,6 @@
 /*
  *  Author: SpringHack - springhack@live.cn
- *  Last modified: 2020-01-06 18:23:42
+ *  Last modified: 2020-01-09 16:46:02
  *  Filename: cc/main.cc
  *  Description: Created by SpringHack using vim automatically.
  */
@@ -9,6 +9,7 @@
 #include <thread>
 #include <vector>
 #include <memory>
+#include <atomic>
 #include <tuple>
 
 #include <napi.h>
@@ -41,13 +42,15 @@ public:
 
   void start_exit_monitor();
 
+  bool is_cb_released;
+  std::mutex cb_released_mutex;
   ThreadSafeFunction on_stdout;
   ThreadSafeFunction on_stderr;
   ThreadSafeFunction on_exit;
   ProcessArgs args;
   ProcessPath path;
   ProcessEnv env;
-  std::unique_ptr<TinyProcessLib::Process> _process;
+  std::shared_ptr<TinyProcessLib::Process> _process;
 
   static FunctionReference constructor;
   static void Initialize(Napi::Env env, Object exports);
@@ -77,13 +80,17 @@ Process::Process(const CallbackInfo& info) : ObjectWrap<Process>(info) {
   on_stdout = ThreadSafeFunction::New(info.Env(), info[3].As<Function>(), "process_on_stdout", 0, 1);
   on_stderr = ThreadSafeFunction::New(info.Env(), info[4].As<Function>(), "process_on_stdout", 0, 1);
   on_exit = ThreadSafeFunction::New(info.Env(), info[5].As<Function>(), "process_on_exit", 0, 1);
+  is_cb_released = false;
   _process = nullptr;
 }
 
 void Process::Finalize(Napi::Env env) {
+  std::lock_guard<std::mutex> guard(cb_released_mutex);
+  if (is_cb_released) return;
   on_stdout.Release();
   on_stderr.Release();
   on_exit.Release();
+  is_cb_released = true;
 }
 
 void Process::Kill(const CallbackInfo& info) {
@@ -177,12 +184,20 @@ void Process::start_exit_monitor() {
       cb.Call({ Number::New(env, reinterpret_cast<int>(*status)) });
       delete status;
     });
+    {
+      std::lock_guard<std::mutex> guard(cb_released_mutex);
+      if (is_cb_released) return;  
+      on_stdout.Release();
+      on_stderr.Release();
+      on_exit.Release();
+      is_cb_released = true;
+    }
   }).detach();
 }
 
 class SpawnAsyncWorker : public AsyncWorker {
 public:
-  std::unique_ptr<TinyProcessLib::Process> cp;
+  std::shared_ptr<TinyProcessLib::Process> cp;
   Process* process;
   SpawnAsyncWorker(Process* process, Function cb, const char* resource_name)
     : AsyncWorker(cb, resource_name), process(process) {}
@@ -194,12 +209,20 @@ public:
       process->env,
       [process](const char* bytes, size_t n) {
         out_data data(bytes, n);
+        {
+          std::lock_guard<std::mutex> guard(process->cb_released_mutex);
+          if (process->is_cb_released) return;  
+        }
         process->on_stdout.BlockingCall(&data, [](Napi::Env env, Function out, out_data* data) {
           out.Call({ Buffer<char>::Copy(env, data->bytes, data->n) });
         });
       },
       [process](const char* bytes, size_t n) {
         out_data data(bytes, n);
+        {
+          std::lock_guard<std::mutex> guard(process->cb_released_mutex);
+          if (process->is_cb_released) return;  
+        }
         process->on_stderr.BlockingCall(&data, [](Napi::Env env, Function err, out_data* data) {
           err.Call({ Buffer<char>::Copy(env, data->bytes, data->n) });
         });

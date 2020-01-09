@@ -5,6 +5,7 @@
       "node"
     ],
     "module": "commonjs",
+    "declaration": true,
     "esModuleInterop": true,
     "noImplicitAny": true,
     "removeComments": true,

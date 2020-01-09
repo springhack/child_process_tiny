@@ -1,24 +1,32 @@
 /*
  *  Author: SpringHack - springhack@live.cn
- *  Last modified: 2020-01-06 19:11:23
+ *  Last modified: 2020-01-09 16:50:50
  *  Filename: ts/index.ts
  *  Description: Created by SpringHack using vim automatically.
  */
 import bindings from 'bindings';
 import { EventEmitter } from 'events';
-import { Writable, Readable } from 'stream';
+import { Writable, PassThrough } from 'stream';
 
 const binding = bindings('child_process_tiny');
+const preventGCSet = new Set();
 
 type IArgs = Array<string>;
-type IPath = string;
+type IWorkDir = string;
 interface IEnv {
   [key: string]: string;
 }
+interface IOptions {
+  cwd?: IWorkDir;
+  env?: IEnv;
+  argv0?: string;
+  [key: string]: any;
+}
+type IExecCallback = (error: Error | void, stdout: void | string | Buffer, stderr: void | string | Buffer) => void;
 
 class ChildProcessTiny extends EventEmitter {
-  public stdout: Readable = new Readable();
-  public stderr: Readable = new Readable();
+  public stdout: PassThrough = new PassThrough();
+  public stderr: PassThrough = new PassThrough();
   public stdin: Writable = new Writable();
   public _cp: any;
 
@@ -42,8 +50,13 @@ class ChildProcessTiny extends EventEmitter {
         .then(() => callback())
         .catch(error => callback(error));
     };
-    this.stdout._read = this.stderr._read = (size: number) => void(size);
     this.stdin.end = () => this._cp.close_stdin();
+    this.stdout.resume();
+    this.stderr.resume();
+    preventGCSet.add(this);
+    this.on('exit', () => {
+      preventGCSet.delete(this);
+    });
   }
 
   public kill(force = false) {
@@ -67,16 +80,24 @@ class ChildProcessTiny extends EventEmitter {
   }
 }
 
-export function spawn(args: IArgs = [], path: IPath = '', env: IEnv = {}): Promise<ChildProcessTiny> {
+export function spawn(command: string, args: IArgs = [], options: IOptions = {}): Promise<ChildProcessTiny> {
+  if (!command) throw new Error('At least command needed !');
+  const _options: IOptions = { ...options };
+  if (!_options.argv0) {
+    _options.argv0 = command;
+  }
+  if (!_options.env) {
+    _options.env = {};
+  }
   return new Promise((resolve) => {
     const _process = new ChildProcessTiny();
-    const cp = new binding.Process(args, path, Object.entries(env), (buffer: Buffer) => {
-      _process.stdout.push(buffer);
+    const cp = new binding.Process([_options.argv0, ...args], _options.cwd || process.cwd(), Object.entries(_options.env), (buffer: Buffer) => {
+      _process.stdout.write(Buffer.from(buffer));
     }, (buffer: Buffer) => {
-      _process.stderr.push(buffer);
+      _process.stderr.write(Buffer.from(buffer));
     }, (status: number) => {
-      _process.stdout.push(null);
-      _process.stdout.push(null);
+      _process.stdout.end();
+      _process.stdout.end();
       _process.emit('exit', status);
     });
     _process._cp = cp;
@@ -84,4 +105,30 @@ export function spawn(args: IArgs = [], path: IPath = '', env: IEnv = {}): Promi
       resolve(_process);
     });
   });
+};
+
+export function exec(command: string, options: IOptions = {}, callback: IExecCallback = () => {}): void {
+  const [ _command, ..._args ] = command.split(/\s+/);
+  if ('function' == typeof options) {
+    callback = options;
+    options = {};
+  }
+  spawn(_command, _args, options)
+    .then((ps) => {
+      let out: Buffer | void;
+      let err: Buffer | void;
+      ps.stdout.on('data', (chunk) => {
+        out = Buffer.concat([out || Buffer.from([]), Buffer.from(chunk)]);
+      });
+      ps.stderr.on('data', (chunk) => {
+        err = Buffer.concat([err || Buffer.from([]), Buffer.from(chunk)]);
+      });
+      ps.on('exit', (status) => {
+        callback(status, out, err);
+        out = err = null;
+      });
+    })
+    .catch((error) => {
+      callback(error, '', '');
+    });
 };
