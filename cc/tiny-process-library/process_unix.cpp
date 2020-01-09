@@ -1,3 +1,9 @@
+/*
+ *  Author: SpringHack - springhack@live.cn
+ *  Last modified: 2020-01-09 21:03:16
+ *  Filename: process_unix.cpp
+ *  Description: Created by SpringHack using vim automatically.
+ */
 #include "process.hpp"
 #include <algorithm>
 #include <bitset>
@@ -232,6 +238,12 @@ void Process::async_read() noexcept {
       }
     }
   });
+}
+
+void Process::wait_fds_close() noexcept {
+  if (stdout_stderr_thread.joinable()) {
+    stdout_stderr_thread.join();
+  }
 }
 
 int Process::get_exit_status() noexcept {

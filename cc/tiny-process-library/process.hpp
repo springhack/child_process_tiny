@@ -1,3 +1,9 @@
+/*
+ *  Author: SpringHack - springhack@live.cn
+ *  Last modified: 2020-01-09 21:01:42
+ *  Filename: cc/tiny-process-library/process.hpp
+ *  Description: Created by SpringHack using vim automatically.
+ */
 #ifndef TINY_PROCESS_LIBRARY_HPP_
 #define TINY_PROCESS_LIBRARY_HPP_
 #include <functional>
@@ -107,6 +113,8 @@ public:
   bool write(const std::string &data);
   /// Close stdin. If the process takes parameters from stdin, use this to notify that all parameters have been sent.
   void close_stdin() noexcept;
+  /// Wait stdout/stderr thread finish
+  void wait_fds_close() noexcept;
 
   /// Kill the process. force=true is only supported on Unix-like systems.
   void kill(bool force = false) noexcept;

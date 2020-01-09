@@ -1,6 +1,6 @@
 /*
  *  Author: SpringHack - springhack@live.cn
- *  Last modified: 2020-01-09 16:50:50
+ *  Last modified: 2020-01-09 21:08:55
  *  Filename: ts/index.ts
  *  Description: Created by SpringHack using vim automatically.
  */
@@ -91,15 +91,27 @@ export function spawn(command: string, args: IArgs = [], options: IOptions = {})
   }
   return new Promise((resolve) => {
     const _process = new ChildProcessTiny();
-    const cp = new binding.Process([_options.argv0, ...args], _options.cwd || process.cwd(), Object.entries(_options.env), (buffer: Buffer) => {
-      _process.stdout.write(Buffer.from(buffer));
-    }, (buffer: Buffer) => {
-      _process.stderr.write(Buffer.from(buffer));
-    }, (status: number) => {
-      _process.stdout.end();
-      _process.stdout.end();
-      _process.emit('exit', status);
-    });
+    const cp = new binding.Process(
+      [_options.argv0, ...args],
+      _options.cwd || process.cwd(),
+      Object.entries(_options.env),
+      (event: string, payload: Buffer | number | void) => {
+        switch (event) {
+          case 'stdout':
+            _process.stdout.write(Buffer.from(payload as Buffer));
+            break;
+          case 'stderr':
+            _process.stderr.write(Buffer.from(payload as Buffer));
+            break;
+          case 'exit':
+            _process.stdout.end();
+            _process.stdout.end();
+            _process.emit('exit', payload as number);
+            break;
+          default:
+        }
+      }
+    );
     _process._cp = cp;
     binding.spawn(cp, () => {
       resolve(_process);

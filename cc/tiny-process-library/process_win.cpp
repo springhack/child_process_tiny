@@ -1,3 +1,9 @@
+/*
+ *  Author: SpringHack - springhack@live.cn
+ *  Last modified: 2020-01-09 21:04:26
+ *  Filename: process_win.cpp
+ *  Description: Created by SpringHack using vim automatically.
+ */
 #include "process.hpp"
 // clang-format off
 #include <windows.h>
@@ -181,6 +187,15 @@ void Process::async_read() noexcept {
         read_stderr(buffer.get(), static_cast<size_t>(n));
       }
     });
+  }
+}
+
+void Process::wait_fds_close() noexcept {
+  if (stdout_thread.joinable()) {
+    stdout_thread.join();
+  }
+  if (stderr_thread.joinable()) {
+    stderr_thread.join();
   }
 }
 

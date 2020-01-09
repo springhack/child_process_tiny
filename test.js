@@ -1,6 +1,6 @@
 /*
  *  Author: SpringHack - springhack@live.cn
- *  Last modified: 2020-01-09 16:52:54
+ *  Last modified: 2020-01-09 21:34:18
  *  Filename: test.js
  *  Description: Created by SpringHack using vim automatically.
  */
@@ -20,7 +20,8 @@ const { exec, spawn } = require('./lib');
   ps.stdin.write('echo PWD is: $(pwd)\n');
   ps.stdin.write('exit\n');
   // Test for exec
-  // exec('ls -al', (status, out, err) => {
-  //   console.log(status, out, err);
-  // });
+  exec('/bin/ls -al', (status, out) => {
+    console.log(status);
+    console.log(out.toString());
+  });
 })();

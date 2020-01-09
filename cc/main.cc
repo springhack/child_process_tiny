@@ -1,6 +1,6 @@
 /*
  *  Author: SpringHack - springhack@live.cn
- *  Last modified: 2020-01-09 16:46:02
+ *  Last modified: 2020-01-09 21:27:01
  *  Filename: cc/main.cc
  *  Description: Created by SpringHack using vim automatically.
  */
@@ -22,12 +22,6 @@ using ProcessArgs = std::vector<TinyProcessLib::Process::string_type>;
 using ProcessPath = TinyProcessLib::Process::string_type;
 using ProcessEnv = std::unordered_map<ProcessPath, ProcessPath>;
 
-struct out_data {
-  const char* bytes;
-  size_t n;
-  out_data(const char* bytes, size_t n) : bytes(bytes), n(n) {}
-};
-
 class Process : public ObjectWrap<Process> {
 public:
   Process(const CallbackInfo& info);
@@ -44,9 +38,7 @@ public:
 
   bool is_cb_released;
   std::mutex cb_released_mutex;
-  ThreadSafeFunction on_stdout;
-  ThreadSafeFunction on_stderr;
-  ThreadSafeFunction on_exit;
+  ThreadSafeFunction on_event;
   ProcessArgs args;
   ProcessPath path;
   ProcessEnv env;
@@ -77,9 +69,7 @@ Process::Process(const CallbackInfo& info) : ObjectWrap<Process>(info) {
     std::string value = item.As<String>();
     env[key] = value;
   }
-  on_stdout = ThreadSafeFunction::New(info.Env(), info[3].As<Function>(), "process_on_stdout", 0, 1);
-  on_stderr = ThreadSafeFunction::New(info.Env(), info[4].As<Function>(), "process_on_stdout", 0, 1);
-  on_exit = ThreadSafeFunction::New(info.Env(), info[5].As<Function>(), "process_on_exit", 0, 1);
+  on_event = ThreadSafeFunction::New(info.Env(), info[3].As<Function>(), "process_on_event", 0, 1);
   is_cb_released = false;
   _process = nullptr;
 }
@@ -87,9 +77,7 @@ Process::Process(const CallbackInfo& info) : ObjectWrap<Process>(info) {
 void Process::Finalize(Napi::Env env) {
   std::lock_guard<std::mutex> guard(cb_released_mutex);
   if (is_cb_released) return;
-  on_stdout.Release();
-  on_stderr.Release();
-  on_exit.Release();
+  on_event.Release();
   is_cb_released = true;
 }
 
@@ -179,17 +167,16 @@ void Process::Initialize(Napi::Env env, Object exports) {
 void Process::start_exit_monitor() {
   std::thread([this]() {
     int* status = new int;
+    _process->wait_fds_close();
     *status = _process->get_exit_status();
-    on_exit.BlockingCall(status, [](Napi::Env env, Function cb, int* status) {
-      cb.Call({ Number::New(env, reinterpret_cast<int>(*status)) });
+    on_event.BlockingCall(status, [](Napi::Env env, Function cb, int* status) {
+      cb.Call({ String::New(env, "exit"), Number::New(env, reinterpret_cast<int>(*status)) });
       delete status;
     });
     {
       std::lock_guard<std::mutex> guard(cb_released_mutex);
       if (is_cb_released) return;  
-      on_stdout.Release();
-      on_stderr.Release();
-      on_exit.Release();
+      on_event.Release();
       is_cb_released = true;
     }
   }).detach();
@@ -208,23 +195,23 @@ public:
       process->path,
       process->env,
       [process](const char* bytes, size_t n) {
-        out_data data(bytes, n);
+        std::vector<char> data(bytes, bytes + n);
         {
           std::lock_guard<std::mutex> guard(process->cb_released_mutex);
           if (process->is_cb_released) return;  
         }
-        process->on_stdout.BlockingCall(&data, [](Napi::Env env, Function out, out_data* data) {
-          out.Call({ Buffer<char>::Copy(env, data->bytes, data->n) });
+        process->on_event.BlockingCall([data](Napi::Env env, Function out) {
+          out.Call({ String::New(env, "stdout"), Buffer<char>::Copy(env, data.data(), data.size()) });
         });
       },
       [process](const char* bytes, size_t n) {
-        out_data data(bytes, n);
+        std::vector<char> data(bytes, bytes + n);
         {
           std::lock_guard<std::mutex> guard(process->cb_released_mutex);
           if (process->is_cb_released) return;  
         }
-        process->on_stderr.BlockingCall(&data, [](Napi::Env env, Function err, out_data* data) {
-          err.Call({ Buffer<char>::Copy(env, data->bytes, data->n) });
+        process->on_event.BlockingCall([data](Napi::Env env, Function err) {
+          err.Call({ String::New(env, "stderr"), Buffer<char>::Copy(env, data.data(), data.size()) });
         });
       },
       true
