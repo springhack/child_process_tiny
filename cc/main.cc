@@ -116,7 +116,7 @@ Value Process::Write(const CallbackInfo& info) {
     if (is_buffer) {
       Buffer<uint8_t> buffer = info[0].As<Buffer<uint8_t>>();
       uint8_t* _data = reinterpret_cast<uint8_t *>(buffer.Data());
-      size_t _length = reinterpret_cast<size_t>(buffer.Length());
+      size_t _length = buffer.Length();
       std::get<1>(data).assign(_data, _data + _length);
     } else {
       std::string _str = info[0].As<String>();
@@ -170,7 +170,7 @@ void Process::start_exit_monitor() {
     _process->wait_fds_close();
     *status = _process->get_exit_status();
     on_event.BlockingCall(status, [](Napi::Env env, Function cb, int* status) {
-      cb.Call({ String::New(env, "exit"), Number::New(env, reinterpret_cast<int>(*status)) });
+      cb.Call({ String::New(env, "exit"), Number::New(env, *status) });
       delete status;
     });
     {

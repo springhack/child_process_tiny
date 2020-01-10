@@ -1,6 +1,6 @@
 {
   "name": "child_process_tiny",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "main": "./lib/index.js",
   "license": "MIT",
   "scripts": {
@@ -23,6 +23,7 @@
   },
   "dependencies": {
     "bindings": "^1.5.0",
+    "iconv-lite": "^0.5.0",
     "node-addon-api": "^2.0.0"
   }
 }
