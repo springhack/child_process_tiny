@@ -1,6 +1,6 @@
 /*
  *  Author: SpringHack - springhack@live.cn
- *  Last modified: 2020-01-09 21:27:01
+ *  Last modified: 2020-01-13 10:57:05
  *  Filename: cc/main.cc
  *  Description: Created by SpringHack using vim automatically.
  */
@@ -25,7 +25,6 @@ using ProcessEnv = std::unordered_map<ProcessPath, ProcessPath>;
 class Process : public ObjectWrap<Process> {
 public:
   Process(const CallbackInfo& info);
-  void Finalize(Napi::Env env);
 
   void Kill(const CallbackInfo& info);
   void CloseStdin(const CallbackInfo& info);
@@ -36,7 +35,6 @@ public:
 
   void start_exit_monitor();
 
-  bool is_cb_released;
   std::mutex cb_released_mutex;
   ThreadSafeFunction on_event;
   ProcessArgs args;
@@ -70,15 +68,7 @@ Process::Process(const CallbackInfo& info) : ObjectWrap<Process>(info) {
     env[key] = value;
   }
   on_event = ThreadSafeFunction::New(info.Env(), info[3].As<Function>(), "process_on_event", 0, 1);
-  is_cb_released = false;
   _process = nullptr;
-}
-
-void Process::Finalize(Napi::Env env) {
-  std::lock_guard<std::mutex> guard(cb_released_mutex);
-  if (is_cb_released) return;
-  on_event.Release();
-  is_cb_released = true;
 }
 
 void Process::Kill(const CallbackInfo& info) {
@@ -173,12 +163,7 @@ void Process::start_exit_monitor() {
       cb.Call({ String::New(env, "exit"), Number::New(env, *status) });
       delete status;
     });
-    {
-      std::lock_guard<std::mutex> guard(cb_released_mutex);
-      if (is_cb_released) return;  
-      on_event.Release();
-      is_cb_released = true;
-    }
+    on_event.Release();
   }).detach();
 }
 
@@ -196,20 +181,12 @@ public:
       process->env,
       [process](const char* bytes, size_t n) {
         std::vector<char> data(bytes, bytes + n);
-        {
-          std::lock_guard<std::mutex> guard(process->cb_released_mutex);
-          if (process->is_cb_released) return;  
-        }
         process->on_event.BlockingCall([data](Napi::Env env, Function out) {
           out.Call({ String::New(env, "stdout"), Buffer<char>::Copy(env, data.data(), data.size()) });
         });
       },
       [process](const char* bytes, size_t n) {
         std::vector<char> data(bytes, bytes + n);
-        {
-          std::lock_guard<std::mutex> guard(process->cb_released_mutex);
-          if (process->is_cb_released) return;  
-        }
         process->on_event.BlockingCall([data](Napi::Env env, Function err) {
           err.Call({ String::New(env, "stderr"), Buffer<char>::Copy(env, data.data(), data.size()) });
         });
